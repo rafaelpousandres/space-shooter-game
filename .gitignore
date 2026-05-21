@@ -1,0 +1,13 @@
+# Original asset pack — only the files we actually use are copied into ./assets/
+Legacy Collection/
+
+# Claude Code session data
+.claude/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.idea/
+.vscode/
