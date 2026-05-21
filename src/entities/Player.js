@@ -3,6 +3,7 @@ const FIRE_COOLDOWN_MS = 140;
 const MAX_HP = 3;
 const HIT_INVULN_MS = 700;
 const RESPAWN_INVULN_MS = 1600;
+const MAX_SHIELD = 3;
 
 export class Player extends Phaser.GameObjects.Container {
   constructor(scene, x, y) {
@@ -13,7 +14,8 @@ export class Player extends Phaser.GameObjects.Container {
     this.thrust = scene.add.sprite(0, 18, 'player-thrust').play('thrust-burn');
     this.thrust.setVisible(false);
     this.ship = scene.add.sprite(0, 0, 'player-ship').play('player-idle');
-    this.add([this.thrust, this.ship]);
+    this.shieldAura = scene.add.sprite(0, 0, 'shield', 0).setScale(1.6).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD);
+    this.add([this.thrust, this.ship, this.shieldAura]);
 
     this.body.setSize(28, 28).setOffset(-14, -14);
     this.body.setCollideWorldBounds(true);
@@ -27,13 +29,23 @@ export class Player extends Phaser.GameObjects.Container {
     this.nextFireAt = 0;
     this.hp = MAX_HP;
     this.lives = 3;
+    this.shieldCharges = 0;
     this.invulnUntil = scene.time.now + RESPAWN_INVULN_MS;
+
     this._blinkTween = scene.tweens.add({
       targets: [this.ship, this.thrust],
       alpha: 0.35,
       duration: 120,
       yoyo: true,
       repeat: -1,
+    });
+    this._auraPulse = scene.tweens.add({
+      targets: this.shieldAura,
+      alpha: 0.45,
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      paused: true,
     });
     this._updateBlink();
   }
@@ -54,8 +66,46 @@ export class Player extends Phaser.GameObjects.Container {
     }
   }
 
+  addShield(amount = MAX_SHIELD) {
+    this.shieldCharges = Math.min(MAX_SHIELD, this.shieldCharges + amount);
+    this._refreshAura();
+    this.scene.events.emit('shield-changed', this.shieldCharges, MAX_SHIELD);
+  }
+
+  _refreshAura() {
+    if (this.shieldCharges > 0) {
+      this.shieldAura.setAlpha(0.85);
+      if (this._auraPulse.paused) this._auraPulse.resume();
+    } else {
+      this._auraPulse.pause();
+      this.shieldAura.setAlpha(0);
+    }
+  }
+
   takeDamage(amount = 1) {
     if (this.isInvulnerable || !this.active) return false;
+
+    if (this.shieldCharges > 0) {
+      this.shieldCharges = Math.max(0, this.shieldCharges - amount);
+      this.scene.events.emit('shield-changed', this.shieldCharges, MAX_SHIELD);
+      this.invulnUntil = this.scene.time.now + HIT_INVULN_MS;
+
+      // Brief flash on the aura, and if depleted, play break anim.
+      this.shieldAura.setAlpha(1);
+      if (this.shieldCharges <= 0) {
+        this._auraPulse.pause();
+        this.shieldAura.play('shield-break');
+        this.shieldAura.once('animationcomplete', () => {
+          this.shieldAura.setAlpha(0);
+          this.shieldAura.setFrame(0);
+        });
+      } else {
+        this.scene.time.delayedCall(120, () => this._refreshAura());
+      }
+      this._updateBlink();
+      return true;
+    }
+
     this.hp -= amount;
     this.scene.events.emit('hp-changed', Math.max(0, this.hp));
     if (this.hp <= 0) {
@@ -78,13 +128,15 @@ export class Player extends Phaser.GameObjects.Container {
       this.scene.onPlayerGameOver();
       return;
     }
-
     this.respawn();
   }
 
   respawn() {
     this.hp = MAX_HP;
+    this.shieldCharges = 0;
     this.scene.events.emit('hp-changed', this.hp);
+    this.scene.events.emit('shield-changed', 0, MAX_SHIELD);
+    this._refreshAura();
     this.setPosition(this.scene.scale.width / 2, this.scene.scale.height - 100);
     this.invulnUntil = this.scene.time.now + RESPAWN_INVULN_MS;
     this._updateBlink();

@@ -22,6 +22,14 @@ export class HUDScene extends Phaser.Scene {
     this.hpFill = this.add.rectangle(10, 32, 120, 10, 0x55ff88).setOrigin(0, 0);
     this.add.text(10, 44, 'HP', { fontFamily: 'monospace', fontSize: '10px', color: '#88ccff' });
 
+    // Shield indicator: three pip icons next to the HP bar.
+    this.shieldPips = [];
+    for (let i = 0; i < 3; i++) {
+      const pip = this.add.sprite(140 + i * 16, 37, 'shield', 0).setScale(0.45).setAlpha(0.25);
+      this.shieldPips.push(pip);
+    }
+    this.add.text(140, 44, 'SHIELD', { fontFamily: 'monospace', fontSize: '10px', color: '#88ddff' });
+
     // Boss HP bar (top center), hidden until boss appears.
     this.bossLabel = this.add.text(width / 2, 8, 'BOSS', {
       fontFamily: 'monospace', fontSize: '12px', color: '#ff8888',
@@ -38,12 +46,14 @@ export class HUDScene extends Phaser.Scene {
     g.on('score-changed', this._onScore, this);
     g.on('hp-changed', this._onHp, this);
     g.on('lives-changed', this._onLives, this);
+    g.on('shield-changed', this._onShield, this);
     g.on('boss-hp-changed', this._onBossHp, this);
 
     this.events.once('shutdown', () => {
       g.off('score-changed', this._onScore, this);
       g.off('hp-changed', this._onHp, this);
       g.off('lives-changed', this._onLives, this);
+      g.off('shield-changed', this._onShield, this);
       g.off('boss-hp-changed', this._onBossHp, this);
     });
   }
@@ -60,6 +70,12 @@ export class HUDScene extends Phaser.Scene {
 
   _onLives(lives) {
     this.livesText.setText(`LIVES ${Math.max(0, lives)}`);
+  }
+
+  _onShield(charges, max) {
+    for (let i = 0; i < this.shieldPips.length; i++) {
+      this.shieldPips[i].setAlpha(i < charges ? 1.0 : 0.18);
+    }
   }
 
   _onBossHp(hp, maxHp) {

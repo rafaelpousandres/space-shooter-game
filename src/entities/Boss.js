@@ -1,30 +1,42 @@
-const MAX_HP = 50;
 const HOVER_Y = 140;
 const ENTER_SPEED = 60;
 
+export const BOSS_TIERS = [
+  { hp:  50, fireMul: 1.00, tint: 0xffffff, name: 'RED LEADER' },
+  { hp:  80, fireMul: 0.75, tint: 0x88ddff, name: 'ICE CRUSHER' },
+  { hp: 120, fireMul: 0.55, tint: 0xffcc44, name: 'GOLD WARDEN' },
+];
+
 export class Boss extends Phaser.GameObjects.Container {
-  constructor(scene, x, y) {
+  constructor(scene, x, y, tier = 0) {
     super(scene, x, y);
     scene.add.existing(this);
     scene.physics.add.existing(this);
+
+    const cfg = BOSS_TIERS[tier];
+    this.tier = tier;
+    this.fireMul = cfg.fireMul;
 
     this.thrust = scene.add.sprite(0, -68, 'boss-thrust').play('boss-thrust-burn').setRotation(Math.PI);
     this.body_ = scene.add.sprite(0, 0, 'boss-body', 0);
     this.cannonL = scene.add.image(-72, 8, 'boss-cannon-left');
     this.cannonR = scene.add.image(72, 8, 'boss-cannon-right');
+    this.body_.setTint(cfg.tint);
+    this.cannonL.setTint(cfg.tint);
+    this.cannonR.setTint(cfg.tint);
     this.add([this.thrust, this.body_, this.cannonL, this.cannonR]);
 
     this.body.setSize(160, 110).setOffset(-80, -55);
 
-    this.hp = MAX_HP;
-    this.maxHp = MAX_HP;
+    this.hp = cfg.hp;
+    this.maxHp = cfg.hp;
     this.state = 'enter';
     this.stateEnterTime = scene.time.now;
-    this.attackIndex = 0;
     this.nextActionAt = 0;
     this.driftSeed = Math.random() * 1000;
     this.alive = true;
     this.spawnX = x;
+    this.normalTint = cfg.tint;
   }
 
   hit(damage = 1) {
@@ -32,9 +44,10 @@ export class Boss extends Phaser.GameObjects.Container {
     this.hp -= damage;
     this.scene.cameras.main.shake(80, 0.004);
     this.body_.setTintFill(0xffffff);
-    this.scene.time.delayedCall(50, () => { if (this.alive) this.body_.clearTint(); });
+    this.scene.time.delayedCall(50, () => {
+      if (this.alive) this.body_.setTint(this.normalTint);
+    });
 
-    // Damage frames: 0 (intact) → 4 (wrecked)
     const ratio = this.hp / this.maxHp;
     let frame = 0;
     if (ratio < 0.2) frame = 4;
@@ -69,7 +82,6 @@ export class Boss extends Phaser.GameObjects.Container {
       return;
     }
 
-    // Gentle horizontal drift around starting X.
     const t = (time - this.stateEnterTime) / 1000;
     this.x = this.spawnX + Math.sin((t + this.driftSeed) * 0.6) * 120;
 
@@ -83,7 +95,6 @@ export class Boss extends Phaser.GameObjects.Container {
   }
 
   _attackSpread(time) {
-    // Fan of bolts from each cannon, downward arc.
     const fanCount = 5;
     const spreadDeg = 60;
     const half = Phaser.Math.DegToRad(spreadDeg / 2);
@@ -95,15 +106,14 @@ export class Boss extends Phaser.GameObjects.Container {
         this.scene.fireBossBolt(cannon.x, cannon.y, angle);
       }
     }
-
     this._shotsInPhase = (this._shotsInPhase || 0) + 1;
     if (this._shotsInPhase >= 3) {
       this._shotsInPhase = 0;
       this.state = 'attack-b';
       this.stateEnterTime = time;
-      this.nextActionAt = time + 600;
+      this.nextActionAt = time + 600 * this.fireMul;
     } else {
-      this.nextActionAt = time + 900;
+      this.nextActionAt = time + 900 * this.fireMul;
     }
   }
 
@@ -120,9 +130,9 @@ export class Boss extends Phaser.GameObjects.Container {
       this._shotsInPhase = 0;
       this.state = 'attack-c';
       this.stateEnterTime = time;
-      this.nextActionAt = time + 800;
+      this.nextActionAt = time + 800 * this.fireMul;
     } else {
-      this.nextActionAt = time + 320;
+      this.nextActionAt = time + 320 * this.fireMul;
     }
   }
 
@@ -130,6 +140,6 @@ export class Boss extends Phaser.GameObjects.Container {
     this.scene.fireBossRay(this.x, this.y + 50);
     this.state = 'attack-a';
     this.stateEnterTime = time;
-    this.nextActionAt = time + 2200; // long cooldown after ray
+    this.nextActionAt = time + 2200 * this.fireMul;
   }
 }

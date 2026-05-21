@@ -68,6 +68,13 @@ export class HelpScene extends Phaser.Scene {
     this.add.text(leftX + 48, y - 8, 'asteroid', rowStyle);
     this.add.text(colX,        y - 8, 'destructible, contact dmg', rowStyle);
 
+    y += 32;
+    this.add.text(leftX, y, 'PICKUPS', labelStyle);
+    y += 26;
+    this.add.sprite(leftX + 16, y, 'shield', 0).setScale(0.7);
+    this.add.text(leftX + 48, y - 8, 'shield', rowStyle);
+    this.add.text(colX,        y - 8, 'absorbs 3 hits', rowStyle);
+
     this.add.text(width / 2, panelY + panelH - 22, 'press H or click to close', {
       fontFamily: 'monospace', fontSize: '12px', color: '#ffd060',
     }).setOrigin(0.5);

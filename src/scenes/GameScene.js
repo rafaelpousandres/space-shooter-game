@@ -3,12 +3,15 @@ import { Projectile } from '../entities/Projectile.js';
 import { Enemy, EnemyType } from '../entities/Enemy.js';
 import { EnemyBolt } from '../entities/EnemyBolt.js';
 import { Asteroid } from '../entities/Asteroid.js';
-import { Boss } from '../entities/Boss.js';
+import { Boss, BOSS_TIERS } from '../entities/Boss.js';
 import { BossBolt } from '../entities/BossBolt.js';
 import { RayBeam } from '../entities/RayBeam.js';
 import { ParallaxProp } from '../entities/ParallaxProp.js';
+import { ShieldPickup } from '../entities/ShieldPickup.js';
 
-const BOSS_SCORE_THRESHOLD = 800;
+const BOSS_THRESHOLDS = [800, 2000, 4000];
+const SHIELD_DROP_CHANCE = 0.15;
+const ASTEROID_SHIELD_DROP = 0.30;
 
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -27,6 +30,7 @@ export class GameScene extends Phaser.Scene {
     this.enemyBolts = this.physics.add.group({ classType: EnemyBolt, runChildUpdate: true, maxSize: 64 });
     this.asteroids = this.physics.add.group({ classType: Asteroid, runChildUpdate: true, maxSize: 24 });
     this.bossBolts = this.physics.add.group({ classType: BossBolt, runChildUpdate: true, maxSize: 64 });
+    this.pickups = this.physics.add.group({ classType: ShieldPickup, runChildUpdate: true, maxSize: 12 });
 
     this.player = new Player(this, width / 2, height - 100);
 
@@ -34,7 +38,7 @@ export class GameScene extends Phaser.Scene {
     this.startTime = this.time.now;
     this.gameOverTriggered = false;
     this.bossActive = false;
-    this.bossSpawned = false;
+    this.bossesDefeated = 0;
     this.boss = null;
     this.rayBeam = null;
 
@@ -44,6 +48,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.asteroids, this._onPlayerHitAsteroid, null, this);
     this.physics.add.overlap(this.player, this.enemyBolts, this._onPlayerHitBolt, null, this);
     this.physics.add.overlap(this.player, this.bossBolts, this._onPlayerHitBolt, null, this);
+    this.physics.add.overlap(this.player, this.pickups, this._onPlayerHitPickup, null, this);
 
     this._spawnTimers = [
       this.time.addEvent({ delay: 850,  loop: true, callback: () => this._spawn(EnemyType.DRIFTER) }),
@@ -60,7 +65,8 @@ export class GameScene extends Phaser.Scene {
     this.events.emit('score-changed', 0);
     this.events.emit('hp-changed', this.player.hp);
     this.events.emit('lives-changed', this.player.lives);
-    this.events.emit('boss-hp-changed', 0, 0); // hidden
+    this.events.emit('shield-changed', 0, 3);
+    this.events.emit('boss-hp-changed', 0, 0);
 
     this.input.keyboard.on('keydown-H', () => {
       if (this.gameOverTriggered) return;
@@ -77,7 +83,6 @@ export class GameScene extends Phaser.Scene {
       this.scene.stop('Help');
     });
 
-    // Seed two props so background isn't empty at start.
     this._spawnProp(true);
     this._spawnProp(true);
   }
@@ -125,17 +130,28 @@ export class GameScene extends Phaser.Scene {
     boom.once('animationcomplete', () => boom.destroy());
   }
 
+  _maybeDropShield(x, y, chance) {
+    if (Math.random() > chance) return;
+    const p = this.pickups.get(x, y);
+    if (!p) return;
+    p.spawn(x, y);
+  }
+
   onPlayerGameOver() {
     if (this.gameOverTriggered) return;
     this.gameOverTriggered = true;
-    this._spawnTimers.forEach(t => t.remove());
-    this._asteroidTimer.remove();
-    this._difficultyTimer.remove();
-    this._propTimer.remove();
+    this._stopAllTimers();
     this.time.delayedCall(900, () => {
       this.scene.stop('HUD');
       this.scene.start('GameOver', { score: this.score });
     });
+  }
+
+  _stopAllTimers() {
+    this._spawnTimers.forEach(t => t.remove());
+    this._asteroidTimer.remove();
+    this._difficultyTimer.remove();
+    this._propTimer.remove();
   }
 
   _spawn(type) {
@@ -172,21 +188,24 @@ export class GameScene extends Phaser.Scene {
     this._asteroidTimer.delay = Math.max(700, this._asteroidTimer.delay - 80);
   }
 
-  _spawnBoss() {
+  _spawnBoss(tier) {
     this.bossActive = true;
-    this.bossSpawned = true;
-    this.boss = new Boss(this, this.scale.width / 2, -120);
-
+    this.boss = new Boss(this, this.scale.width / 2, -120, tier);
     this.physics.add.overlap(this.bullets, this.boss, this._onBulletHitBoss, null, this);
     this.physics.add.overlap(this.player, this.boss, this._onPlayerHitBoss, null, this);
 
     this.events.emit('boss-hp-changed', this.boss.hp, this.boss.maxHp);
 
-    // Big announcement text.
-    const txt = this.add.text(this.scale.width / 2, this.scale.height / 2, 'WARNING\nBOSS APPROACHING', {
+    const cfg = BOSS_TIERS[tier];
+    const num = tier + 1;
+    const txt = this.add.text(this.scale.width / 2, this.scale.height / 2,
+      `WARNING\nBOSS ${num} / ${BOSS_THRESHOLDS.length}\n${cfg.name}`, {
       fontFamily: 'monospace', fontSize: '22px', color: '#ff5566', align: 'center',
     }).setOrigin(0.5).setAlpha(0);
-    this.tweens.add({ targets: txt, alpha: 1, duration: 250, yoyo: true, hold: 900, onComplete: () => txt.destroy() });
+    this.tweens.add({
+      targets: txt, alpha: 1, duration: 250, yoyo: true, hold: 1100,
+      onComplete: () => txt.destroy(),
+    });
     this.cameras.main.shake(300, 0.004);
   }
 
@@ -214,8 +233,15 @@ export class GameScene extends Phaser.Scene {
     this.score += amount;
     this.events.emit('score-changed', this.score);
     if (x !== undefined) this._scorePopup(x, y, amount);
-    if (!this.bossSpawned && !this.gameOverTriggered && this.score >= BOSS_SCORE_THRESHOLD) {
-      this._spawnBoss();
+    this._maybeTriggerBoss();
+  }
+
+  _maybeTriggerBoss() {
+    if (this.gameOverTriggered || this.bossActive) return;
+    const next = this.bossesDefeated;
+    if (next >= BOSS_THRESHOLDS.length) return;
+    if (this.score >= BOSS_THRESHOLDS[next]) {
+      this._spawnBoss(next);
     }
   }
 
@@ -227,6 +253,7 @@ export class GameScene extends Phaser.Scene {
     if (killed) {
       this._spawnEnemyExplosion(enemy.x, enemy.y);
       this._addScore(enemy.scoreValue, enemy.x, enemy.y);
+      this._maybeDropShield(enemy.x, enemy.y, SHIELD_DROP_CHANCE);
       enemy.deactivate();
     }
   }
@@ -239,6 +266,9 @@ export class GameScene extends Phaser.Scene {
     if (killed) {
       this.spawnBigExplosion(asteroid.x, asteroid.y);
       this._addScore(asteroid.scoreValue, asteroid.x, asteroid.y);
+      // Larger asteroids drop shields more often.
+      const chance = asteroid.scoreValue >= 30 ? ASTEROID_SHIELD_DROP : ASTEROID_SHIELD_DROP * 0.5;
+      this._maybeDropShield(asteroid.x, asteroid.y, chance);
       asteroid.deactivate();
     }
   }
@@ -248,14 +278,11 @@ export class GameScene extends Phaser.Scene {
     this._spawnHitSpark(bullet.x, bullet.y);
     bullet.deactivate();
     const killed = boss.hit(1);
-    if (killed) {
-      this._onBossDefeated(boss);
-    }
+    if (killed) this._onBossDefeated(boss);
   }
 
   _onBossDefeated(boss) {
     this._addScore(500);
-    // Chain a few explosions for impact.
     this.cameras.main.shake(800, 0.02);
     for (let i = 0; i < 8; i++) {
       this.time.delayedCall(i * 90, () => {
@@ -265,21 +292,43 @@ export class GameScene extends Phaser.Scene {
         this.spawnBigExplosion(boss.x + ox, boss.y + oy, Phaser.Math.FloatBetween(1.8, 2.6));
       });
     }
+    // Guaranteed shield drop on boss kill.
+    this._maybeDropShield(boss.x, boss.y, 1.0);
+
     this.time.delayedCall(900, () => {
       boss.destroy();
       this.boss = null;
       this.bossActive = false;
-      this._endGameVictory();
+      this.bossesDefeated += 1;
+      this.events.emit('boss-hp-changed', 0, 0);
+
+      if (this.bossesDefeated >= BOSS_THRESHOLDS.length) {
+        this._endGameVictory();
+      } else {
+        this._postBossRespite();
+      }
     });
+  }
+
+  _postBossRespite() {
+    // Brief breather, then regular spawning automatically resumes (bossActive flag cleared).
+    const respiteMs = 1800;
+    const banner = this.add.text(this.scale.width / 2, this.scale.height / 2 - 40,
+      'SECTOR CLEAR', {
+        fontFamily: 'monospace', fontSize: '22px', color: '#88ffcc',
+      }).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({
+      targets: banner, alpha: 1, duration: 250, yoyo: true, hold: respiteMs - 500,
+      onComplete: () => banner.destroy(),
+    });
+    // Re-evaluate boss threshold in case score is already past the next one.
+    this.time.delayedCall(respiteMs, () => this._maybeTriggerBoss());
   }
 
   _endGameVictory() {
     if (this.gameOverTriggered) return;
     this.gameOverTriggered = true;
-    this._spawnTimers.forEach(t => t.remove());
-    this._asteroidTimer.remove();
-    this._difficultyTimer.remove();
-    this._propTimer.remove();
+    this._stopAllTimers();
     this.time.delayedCall(800, () => {
       this.scene.stop('HUD');
       this.scene.start('Victory', { score: this.score });
@@ -320,5 +369,13 @@ export class GameScene extends Phaser.Scene {
   _onPlayerHitRay(player, ray) {
     if (!ray.active || !player.active) return;
     player.takeDamage(1);
+  }
+
+  _onPlayerHitPickup(player, pickup) {
+    if (!pickup.active || !player.active) return;
+    pickup.deactivate();
+    this.player.addShield();
+    // Visual confirmation: brief sparkle at pickup point.
+    this._spawnHitSpark(pickup.x, pickup.y);
   }
 }

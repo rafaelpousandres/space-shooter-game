@@ -22,6 +22,7 @@ export class BootScene extends Phaser.Scene {
     this.load.spritesheet('pulse',     'assets/fx/pulse.png',  { frameWidth: 63, frameHeight: 32 });
     this.load.spritesheet('bolt',      'assets/fx/bolt.png',   { frameWidth: 48, frameHeight: 32 });
     this.load.spritesheet('hit-spark', 'assets/fx/hit.png',    { frameWidth: 31, frameHeight: 32 });
+    this.load.spritesheet('shield',    'assets/fx/shield.png', { frameWidth: 51, frameHeight: 47 });
 
     for (let i = 1; i <= 5; i++) {
       this.load.image(`asteroid-${i}`, `assets/asteroids/asteroid-${i}.png`);
@@ -50,6 +51,7 @@ export class BootScene extends Phaser.Scene {
     a.create({ key: 'pulse-fly', frames: a.generateFrameNumbers('pulse', { start: 0, end: 3 }), frameRate: 14, repeat: -1 });
     a.create({ key: 'bolt-fly',  frames: a.generateFrameNumbers('bolt',  { start: 0, end: 3 }), frameRate: 14, repeat: -1 });
     a.create({ key: 'hit-flash', frames: a.generateFrameNumbers('hit-spark', { start: 0, end: 2 }), frameRate: 24 });
+    a.create({ key: 'shield-break', frames: a.generateFrameNumbers('shield', { start: 0, end: 7 }), frameRate: 18 });
 
     a.create({ key: 'boss-thrust-burn', frames: a.generateFrameNumbers('boss-thrust', { start: 0, end: 1 }),  frameRate: 14, repeat: -1 });
     a.create({ key: 'boss-bolt-fly',    frames: a.generateFrameNumbers('boss-bolt',   { start: 0, end: 1 }),  frameRate: 12, repeat: -1 });

@@ -21,7 +21,8 @@ A top-down vertical-scrolling shoot-em-up. The player pilots a fighter against w
 - Asteroids drift down as destructible environmental hazards
 - Player has HP (3 hits = lose a life) and lives (3 = game over)
 - Score per kill, persisted for the run; shown in HUD
-- Wave-based difficulty ramp; a boss caps the run at score ≥ 800
+- Wave-based difficulty ramp; **three boss battles** at score thresholds 800 / 2000 / 4000 (each tier tougher, color-tinted)
+- **Shield pickups** drop from kills (~15% from enemies, ~30% from large asteroids, 100% from bosses); absorb up to 3 hits before breaking
 
 ## Out of scope
 - **Audio** — the provided asset pack is art only.
@@ -62,6 +63,7 @@ All runtime assets live under `./assets/`. Art licensing is in [`LICENSE-art.pdf
 - Tank/enemy bolt: [`assets/fx/bolt.png`](assets/fx/bolt.png) — 48×32, 4 frames
 - Hit spark: [`assets/fx/hit.png`](assets/fx/hit.png) — 31×32, 3 frames
 - Explosion: [`assets/fx/explosion-g.png`](assets/fx/explosion-g.png) — 48×48, 7 frames
+- Shield (pickup + aura + break): [`assets/fx/shield.png`](assets/fx/shield.png) — 51×47, 8 frames
 
 ---
 
@@ -131,7 +133,8 @@ Open the page, fly the ship, shoot one enemy type.
         ├── Boss.js
         ├── BossBolt.js
         ├── RayBeam.js
-        └── ParallaxProp.js
+        ├── ParallaxProp.js
+        └── ShieldPickup.js
 ```
 
 ## Running locally
