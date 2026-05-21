@@ -1,9 +1,13 @@
 const MOVE_SPEED = 240;
+const TOUCH_MAX_SPEED = MOVE_SPEED * 2.5;
 const FIRE_COOLDOWN_MS = 140;
 const MAX_HP = 3;
 const HIT_INVULN_MS = 700;
 const RESPAWN_INVULN_MS = 1600;
 const MAX_SHIELD = 3;
+const TOUCH_Y_OFFSET = 60;     // ship hovers above the finger
+const UI_ZONE_HEIGHT = 90;     // top strip reserved for HUD buttons
+const UI_ZONE_WIDTH = 150;     // right strip reserved for HUD buttons
 
 export class Player extends Phaser.GameObjects.Container {
   constructor(scene, x, y) {
@@ -34,18 +38,11 @@ export class Player extends Phaser.GameObjects.Container {
 
     this._blinkTween = scene.tweens.add({
       targets: [this.ship, this.thrust],
-      alpha: 0.35,
-      duration: 120,
-      yoyo: true,
-      repeat: -1,
+      alpha: 0.35, duration: 120, yoyo: true, repeat: -1,
     });
     this._auraPulse = scene.tweens.add({
       targets: this.shieldAura,
-      alpha: 0.45,
-      duration: 600,
-      yoyo: true,
-      repeat: -1,
-      paused: true,
+      alpha: 0.45, duration: 600, yoyo: true, repeat: -1, paused: true,
     });
     this._updateBlink();
   }
@@ -90,7 +87,6 @@ export class Player extends Phaser.GameObjects.Container {
       this.scene.events.emit('shield-changed', this.shieldCharges, MAX_SHIELD);
       this.invulnUntil = this.scene.time.now + HIT_INVULN_MS;
 
-      // Brief flash on the aura, and if depleted, play break anim.
       this.shieldAura.setAlpha(1);
       if (this.shieldCharges <= 0) {
         this._auraPulse.pause();
@@ -146,32 +142,66 @@ export class Player extends Phaser.GameObjects.Container {
     if (!this.active) return;
     this._updateBlink();
 
+    const pointer = this.pointer;
+    const w = this.scene.scale.width;
+    const h = this.scene.scale.height;
+
     const k = this.keys;
-    const left = k.left.isDown || k.leftArrow.isDown;
+    const left  = k.left.isDown  || k.leftArrow.isDown;
     const right = k.right.isDown || k.rightArrow.isDown;
-    const up = k.up.isDown || k.upArrow.isDown;
-    const down = k.down.isDown || k.downArrow.isDown;
+    const up    = k.up.isDown    || k.upArrow.isDown;
+    const down  = k.down.isDown  || k.downArrow.isDown;
+    const anyKey = left || right || up || down;
 
-    let vx = (right ? 1 : 0) - (left ? 1 : 0);
-    let vy = (down ? 1 : 0) - (up ? 1 : 0);
-    if (vx !== 0 && vy !== 0) {
-      const inv = 1 / Math.SQRT2;
-      vx *= inv; vy *= inv;
+    // Ignore pointer input that originated on the HUD buttons.
+    const downInUi = pointer.downY < UI_ZONE_HEIGHT && pointer.downX > w - UI_ZONE_WIDTH;
+    const pointerLive = pointer.isDown && !downInUi;
+    const usingTouch = !!pointer.wasTouch;
+
+    // ---- Movement ----
+    let moving = false;
+    if (anyKey) {
+      let vx = (right ? 1 : 0) - (left ? 1 : 0);
+      let vy = (down ? 1 : 0) - (up ? 1 : 0);
+      if (vx !== 0 && vy !== 0) { const inv = 1 / Math.SQRT2; vx *= inv; vy *= inv; }
+      this.body.setVelocity(vx * MOVE_SPEED, vy * MOVE_SPEED);
+      moving = true;
+    } else if (pointerLive && usingTouch) {
+      const tx = Phaser.Math.Clamp(pointer.x, 24, w - 24);
+      const ty = Phaser.Math.Clamp(pointer.y - TOUCH_Y_OFFSET, 24, h - 24);
+      const dx = tx - this.x;
+      const dy = ty - this.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 3) {
+        const speed = Math.min(TOUCH_MAX_SPEED, dist * 12);
+        this.body.setVelocity((dx / dist) * speed, (dy / dist) * speed);
+        moving = true;
+      } else {
+        this.body.setVelocity(0, 0);
+      }
+    } else {
+      this.body.setVelocity(0, 0);
     }
-    this.body.setVelocity(vx * MOVE_SPEED, vy * MOVE_SPEED);
-    this.thrust.setVisible(vx !== 0 || vy !== 0);
 
-    const aimX = this.pointer.worldX;
-    const aimY = this.pointer.worldY;
-    const angle = Math.atan2(aimY - this.y, aimX - this.x);
-    this.ship.rotation = angle + Math.PI / 2;
+    // ---- Aim ----
+    // Touch: always straight up (mobile-friendly). Mouse: toward cursor.
+    // Before any pointer input the cursor is at (0,0); skip aim then so the
+    // ship doesn't snap toward the top-left corner on first frame.
+    const hasPointerInput = pointer.downX >= 0 || pointer.x !== 0 || pointer.y !== 0;
+    const aimAngle = (!hasPointerInput || usingTouch)
+      ? -Math.PI / 2
+      : Math.atan2(pointer.worldY - this.y, pointer.worldX - this.x);
+
+    this.ship.rotation = aimAngle + Math.PI / 2;
     this.thrust.rotation = this.ship.rotation;
     const back = 22;
-    this.thrust.x = -Math.cos(angle) * back;
-    this.thrust.y = -Math.sin(angle) * back;
+    this.thrust.x = -Math.cos(aimAngle) * back;
+    this.thrust.y = -Math.sin(aimAngle) * back;
+    this.thrust.setVisible(moving);
 
-    if (this.pointer.isDown && time >= this.nextFireAt) {
-      this.scene.fireBullet(this.x, this.y, angle);
+    // ---- Fire ----
+    if (pointerLive && time >= this.nextFireAt) {
+      this.scene.fireBullet(this.x, this.y, aimAngle);
       this.nextFireAt = time + FIRE_COOLDOWN_MS;
     }
   }

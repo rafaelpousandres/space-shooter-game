@@ -1,3 +1,6 @@
+const isTouchDevice = () => (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+  || (typeof window !== 'undefined' && 'ontouchstart' in window);
+
 export class HelpScene extends Phaser.Scene {
   constructor() {
     super('Help');
@@ -9,11 +12,14 @@ export class HelpScene extends Phaser.Scene {
 
   create() {
     const { width, height } = this.scale;
+    const touch = isTouchDevice();
 
-    this.add.rectangle(0, 0, width, height, 0x000010, 0.82).setOrigin(0, 0);
+    const bg = this.add.rectangle(0, 0, width, height, 0x000010, 0.85)
+      .setOrigin(0, 0)
+      .setInteractive();
 
     const panelW = 380;
-    const panelH = 520;
+    const panelH = 560;
     const panelX = (width - panelW) / 2;
     const panelY = (height - panelH) / 2;
     this.add.rectangle(panelX, panelY, panelW, panelH, 0x111a2c, 0.95).setOrigin(0, 0)
@@ -32,7 +38,12 @@ export class HelpScene extends Phaser.Scene {
 
     this.add.text(leftX, y, 'CONTROLS', labelStyle);
     y += 22;
-    const rows = [
+    const rows = touch ? [
+      ['tap & drag',  'move (auto-fire)'],
+      ['top-right ‖', 'pause'],
+      ['top-right ?', 'this help'],
+      ['top-right ⛶', 'fullscreen'],
+    ] : [
       ['WASD / arrows', 'move'],
       ['mouse',         'aim'],
       ['left click',    'fire (hold for auto)'],
@@ -75,18 +86,20 @@ export class HelpScene extends Phaser.Scene {
     this.add.text(leftX + 48, y - 8, 'shield', rowStyle);
     this.add.text(colX,        y - 8, 'absorbs 3 hits', rowStyle);
 
-    this.add.text(width / 2, panelY + panelH - 22, 'press H or click to close', {
-      fontFamily: 'monospace', fontSize: '12px', color: '#ffd060',
-    }).setOrigin(0.5);
+    this.add.text(width / 2, panelY + panelH - 22,
+      touch ? 'tap anywhere to close' : 'press H, Esc, or click to close', {
+        fontFamily: 'monospace', fontSize: '12px', color: '#ffd060',
+      }).setOrigin(0.5);
 
     const close = () => {
-      if (this.returnTo === 'Game' && this.scene.isPaused('Game')) {
-        this.scene.resume('Game');
+      if (this.returnTo === 'Game') {
+        if (this.scene.isPaused('Game')) this.scene.resume('Game');
+        if (this.scene.isPaused('HUD'))  this.scene.resume('HUD');
       }
       this.scene.stop();
     };
+    bg.on('pointerdown', close);
     this.input.keyboard.once('keydown-H', close);
     this.input.keyboard.once('keydown-ESC', close);
-    this.input.once('pointerdown', close);
   }
 }

@@ -68,14 +68,9 @@ export class GameScene extends Phaser.Scene {
     this.events.emit('shield-changed', 0, 3);
     this.events.emit('boss-hp-changed', 0, 0);
 
-    this.input.keyboard.on('keydown-H', () => {
-      if (this.gameOverTriggered) return;
-      if (this.scene.isPaused()) return;
-      this.scene.pause();
-      this.scene.launch('Help', { returnTo: 'Game' });
-    });
-    this.input.keyboard.on('keydown-P', () => this._togglePause());
-    this.input.keyboard.on('keydown-ESC', () => this._togglePause());
+    this.input.keyboard.on('keydown-H', () => this.requestHelp());
+    this.input.keyboard.on('keydown-P', () => this.requestPause());
+    this.input.keyboard.on('keydown-ESC', () => this.requestPause());
 
     this.events.once('shutdown', () => {
       this.scene.stop('HUD');
@@ -92,11 +87,26 @@ export class GameScene extends Phaser.Scene {
     this.player.update(time, delta);
   }
 
-  _togglePause() {
+  requestPause() {
     if (this.gameOverTriggered) return;
     if (this.scene.isPaused()) return;
     this.scene.pause();
+    this.scene.pause('HUD');
     this.scene.launch('Pause');
+  }
+
+  requestHelp() {
+    if (this.gameOverTriggered) return;
+    if (this.scene.isPaused()) return;
+    this.scene.pause();
+    this.scene.pause('HUD');
+    this.scene.launch('Help', { returnTo: 'Game' });
+  }
+
+  requestFullscreen() {
+    if (!this.scale.fullscreen.available) return;
+    if (this.scale.isFullscreen) this.scale.stopFullscreen();
+    else this.scale.startFullscreen();
   }
 
   fireBullet(x, y, angle) {
